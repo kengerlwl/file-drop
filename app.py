@@ -78,15 +78,15 @@ def upload_file():
     # 猜测 content-type
     content_type = mimetypes.guess_type(original_name)[0] or 'application/octet-stream'
 
+    # 获取文件大小（在上传前）
+    file.seek(0, 2)
+    file_size = file.tell()
+    file.seek(0)
+
     # 上传到 R2
     result = storage.upload_file(file, key, content_type=content_type)
     if not result:
         return jsonify({'error': '上传失败'}), 500
-
-    # 获取文件大小
-    file.seek(0, 2)
-    file_size = file.tell()
-    file.seek(0)
 
     # 生成下载链接（预签名 URL，有效期 7 天）
     download_url = storage.generate_presigned_url(key, expires_in=7 * 24 * 3600)
