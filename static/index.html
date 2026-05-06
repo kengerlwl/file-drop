@@ -169,8 +169,13 @@
                 try {
                     const res = await fetch('/api/upload', { method: 'POST', body: formData });
                     if (!res.ok) {
-                        const err = await res.json();
-                        alert(`上传失败: ${err.error}`);
+                        const text = await res.text();
+                        try {
+                            const err = JSON.parse(text);
+                            alert(`上传失败: ${err.error}`);
+                        } catch {
+                            alert(`上传失败: 服务器返回 ${res.status}，文件可能太大或超时`);
+                        }
                     }
                 } catch (e) {
                     alert(`上传失败: ${e.message}`);
