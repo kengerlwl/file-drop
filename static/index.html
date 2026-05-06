@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FileDrop - 文件管理</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { margin-bottom: 20px; color: #333; }
+        
+        /* 上传区域 */
+        .upload-area {
+            background: #fff;
+            border: 2px dashed #ddd;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 24px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #4CAF50;
+            background: #f0fff0;
+        }
+        .upload-area p { color: #666; font-size: 16px; }
+        .upload-area input { display: none; }
+        
+        /* 文件列表 */
+        .file-list { list-style: none; }
+        .file-item {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .file-info { flex: 1; }
+        .file-info .name { font-weight: 500; color: #333; word-break: break-all; }
+        .file-info .meta { font-size: 12px; color: #999; margin-top: 4px; }
+        .file-actions { display: flex; gap: 8px; align-items: center; }
+        
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.8; }
+        .btn-qr { background: #4CAF50; color: #fff; }
+        .btn-delete { background: #f44336; color: #fff; }
+        .btn-refresh { background: #2196F3; color: #fff; }
+        
+        /* 二维码弹窗 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            max-width: 360px;
+            width: 90%;
+        }
+        .modal h3 { margin-bottom: 16px; color: #333; }
+        .modal canvas { margin: 0 auto; }
+        .modal .url-text {
+            font-size: 11px;
+            color: #999;
+            margin-top: 12px;
+            word-break: break-all;
+            max-height: 60px;
+            overflow: hidden;
+        }
+        .modal .btn-close {
+            margin-top: 16px;
+            background: #eee;
+            color: #333;
+            padding: 8px 24px;
+        }
+
+        .empty { text-align: center; color: #999; padding: 40px; }
+        .uploading { opacity: 0.6; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <h1>📁 FileDrop 文件管理</h1>
+    
+    <!-- 上传区域 -->
+    <div class="upload-area" id="uploadArea">
+        <p>点击或拖拽文件到此处上传</p>
+        <input type="file" id="fileInput" multiple>
+    </div>
+    
+    <!-- 文件列表 -->
+    <ul class="file-list" id="fileList"></ul>
+    
+    <!-- 二维码弹窗 -->
+    <div class="modal-overlay" id="modal">
+        <div class="modal">
+            <h3 id="modalTitle">扫码下载</h3>
+            <canvas id="qrCanvas"></canvas>
+            <p class="url-text" id="modalUrl"></p>
+            <button class="btn btn-close" onclick="closeModal()">关闭</button>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const modal = document.getElementById('modal');
+
+        // 上传区域点击
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        // 拖拽
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                uploadFiles(e.dataTransfer.files);
+            }
+        });
+        
+        // 文件选择
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                uploadFiles(fileInput.files);
+                fileInput.value = '';
+            }
+        });
+
+        // 上传文件
+        async function uploadFiles(files) {
+            uploadArea.classList.add('uploading');
+            uploadArea.querySelector('p').textContent = '上传中...';
+            
+            for (const file of files) {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                try {
+                    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                    if (!res.ok) {
+                        const err = await res.json();
+                        alert(`上传失败: ${err.error}`);
+                    }
+                } catch (e) {
+                    alert(`上传失败: ${e.message}`);
+                }
+            }
+            
+            uploadArea.classList.remove('uploading');
+            uploadArea.querySelector('p').textContent = '点击或拖拽文件到此处上传';
+            loadFiles();
+        }
+
+        // 加载文件列表
+        async function loadFiles() {
+            try {
+                const res = await fetch('/api/files');
+                const files = await res.json();
+                renderFiles(files);
+            } catch (e) {
+                fileList.innerHTML = '<li class="empty">加载失败</li>';
+            }
+        }
+
+        // 渲染文件列表
+        function renderFiles(files) {
+            if (files.length === 0) {
+                fileList.innerHTML = '<li class="empty">暂无文件，上传一个试试</li>';
+                return;
+            }
+
+            fileList.innerHTML = files.map(f => `
+                <li class="file-item">
+                    <div class="file-info">
+                        <div class="name">${escapeHtml(f.name)}</div>
+                        <div class="meta">${formatSize(f.size)} · ${formatTime(f.created_at)}</div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="btn btn-qr" onclick="showQR('${f.id}', '${escapeAttr(f.name)}', '${escapeAttr(f.download_url)}')">二维码</button>
+                        <button class="btn btn-refresh" onclick="refreshUrl('${f.id}')">刷新链接</button>
+                        <button class="btn btn-delete" onclick="deleteFile('${f.id}')">删除</button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        // 显示二维码
+        function showQR(id, name, url) {
+            document.getElementById('modalTitle').textContent = name;
+            document.getElementById('modalUrl').textContent = url;
+            modal.classList.add('active');
+            
+            const canvas = document.getElementById('qrCanvas');
+            QRCode.toCanvas(canvas, url, { width: 256, margin: 2 }, (err) => {
+                if (err) console.error(err);
+            });
+        }
+
+        function closeModal() {
+            modal.classList.remove('active');
+        }
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        // 刷新链接
+        async function refreshUrl(id) {
+            try {
+                const res = await fetch(`/api/files/${id}/refresh`, { method: 'POST' });
+                if (res.ok) {
+                    loadFiles();
+                } else {
+                    alert('刷新失败');
+                }
+            } catch (e) {
+                alert(`刷新失败: ${e.message}`);
+            }
+        }
+
+        // 删除文件
+        async function deleteFile(id) {
+            if (!confirm('确定删除？')) return;
+            try {
+                const res = await fetch(`/api/files/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    loadFiles();
+                } else {
+                    alert('删除失败');
+                }
+            } catch (e) {
+                alert(`删除失败: ${e.message}`);
+            }
+        }
+
+        // 工具函数
+        function formatSize(bytes) {
+            if (!bytes) return '未知大小';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+        }
+
+        function formatTime(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function escapeAttr(str) {
+            return str.replace(/'/g, "\\'").replace(/"/g, '\\"');
+        }
+
+        // 初始化
+        loadFiles();
+    </script>
+</body>
+</html>
