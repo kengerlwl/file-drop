@@ -149,6 +149,23 @@ def refresh_url(file_id):
     return jsonify({'error': '文件不存在'}), 404
 
 
+@app.route('/d/<file_id>', methods=['GET'])
+def download_redirect(file_id):
+    """永久下载链接 - 二维码指向此地址，实时生成预签名 URL 并 302 跳转"""
+    from flask import redirect
+    files = load_files()
+    file_record = next((f for f in files if f['id'] == file_id), None)
+    if not file_record:
+        return '文件不存在', 404
+
+    # 实时生成预签名 URL（1小时有效）
+    download_url = storage.generate_presigned_url(file_record['key'], expires_in=3600)
+    if not download_url:
+        return '生成下载链接失败', 500
+
+    return redirect(download_url)
+
+
 @app.route('/api/health', methods=['GET'])
 def health():
     """健康检查"""
